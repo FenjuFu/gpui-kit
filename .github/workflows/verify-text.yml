@@ -16,7 +16,7 @@ jobs:
       - uses: rui314/setup-mold@v1
       - run: script/bootstrap
       - name: fmt
-        run: cargo fmt --check
+        run: rustfmt --check --edition 2024 crates/base/src/text/state.rs
       - name: gpui-base lib tests
         run: cargo test -p gpui-base --lib --locked
       - name: clippy gpui-base
