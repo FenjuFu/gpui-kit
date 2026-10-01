@@ -1,0 +1,31 @@
+name: Verify text
+on:
+  push:
+    branches: [ci-verify-text]
+  workflow_dispatch:
+env:
+  CARGO_PROFILE_DEV_DEBUG: 0
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy, rustfmt
+      - uses: rui314/setup-mold@v1
+      - run: script/bootstrap
+      - name: fmt
+        run: cargo fmt --check
+      - name: gpui-base lib tests
+        run: cargo test -p gpui-base --lib --locked
+      - name: clippy gpui-base
+        run: cargo clippy -p gpui-base --all-targets --locked -- --deny warnings
+      - name: Old acceptance rule fails the new stream test
+        run: |
+          perl -0pi -e 's/if parsed_update\.revision < self\.full_update_revision\s*\|\| parsed_update\.revision <= self\.committed_revision\s*\{/if parsed_update.revision != self.revision {/' crates/base/src/text/state.rs
+          grep -n "parsed_update.revision != self.revision" crates/base/src/text/state.rs
+          if cargo test -p gpui-base --lib --locked text::state::tests::stream_commits_a_parse_that_a_newer_chunk_overtook; then
+            echo "expected the old rule to fail"; exit 1
+          fi
+          cargo test -p gpui-base --lib --locked text::state::tests::a_parse_from_before_a_replacement_is_discarded
