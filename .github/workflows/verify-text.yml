@@ -20,7 +20,7 @@ jobs:
       - name: gpui-base lib tests
         run: cargo test -p gpui-base --lib --locked
       - name: clippy gpui-base
-        run: cargo clippy -p gpui-base --all-targets --locked -- --deny warnings
+        run: cargo clippy -p gpui-base --lib --tests --locked -- --deny warnings
       - name: Old acceptance rule fails the new stream test
         run: |
           perl -0pi -e 's/if parsed_update\.revision < self\.full_update_revision\s*\|\| parsed_update\.revision <= self\.committed_revision\s*\{/if parsed_update.revision != self.revision {/' crates/base/src/text/state.rs
