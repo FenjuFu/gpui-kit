@@ -570,6 +570,12 @@ impl TextViewState {
                     &content.document,
                     Instant::now(),
                 );
+                // This result may cover only part of the queued appends.
+                // Keep the uncommitted tail pending from this document's end,
+                // rather than consuming its fade with the earlier chunk.
+                if parsed_update.revision < self.revision {
+                    self.stream_fade.note_extend(content.document.source.len());
+                }
                 self.parsed_content = content;
                 self.parsed_error = None;
                 self.compatible_layout_update = parsed_update.selection_compatible;
@@ -1357,6 +1363,43 @@ mod tests {
                 assert!(state.stream_fade.frame(later, false).is_none());
                 assert!(state.stream_fade.frame(Instant::now(), false).is_none());
             });
+        }
+
+        #[gpui::test]
+        fn overtaken_parse_preserves_the_remaining_chunks_fade(cx: &mut TestAppContext) {
+            let state = fading_state("hello", cx);
+            let parsed = super::push_and_parse(&state, " one", cx);
+            state.update(cx, |state, cx| {
+                state.push_str(" two", cx);
+                state.commit_parsed_update(parsed, cx);
+            });
+            assert_eq!(fades(&state, TextLeafKey::block(0), cx), Some(vec![5..9]));
+
+            cx.run_until_parked();
+            assert_eq!(
+                fades(&state, TextLeafKey::block(0), cx),
+                Some(vec![5..9, 9..13])
+            );
+        }
+
+        #[gpui::test]
+        fn overtaken_parse_preserves_a_remaining_blocks_fade(cx: &mut TestAppContext) {
+            let state = fading_state("hello", cx);
+            let parsed = super::push_and_parse(&state, " one", cx);
+            state.update(cx, |state, cx| {
+                state.push_str("\n\nsecond", cx);
+                state.commit_parsed_update(parsed, cx);
+            });
+            assert_eq!(fades(&state, TextLeafKey::block(0), cx), Some(vec![5..9]));
+
+            // A third chunk arrives while the second is still uncommitted.
+            state.update(cx, |state, cx| state.push_str(" third", cx));
+            cx.run_until_parked();
+            let ranges = fades(&state, TextLeafKey::block(11), cx).expect("new paragraph fades");
+            assert_eq!(
+                ranges.into_iter().flatten().collect::<Vec<_>>(),
+                (0..12).collect::<Vec<_>>()
+            );
         }
 
         #[gpui::test]
